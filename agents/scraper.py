@@ -36,13 +36,13 @@ class JobScraper:
                     # Extract Job ID
                     job_id = card.get_attribute("data-occludable-job-id") or card.get_attribute("data-job-id") or ""
                     title_el = page.locator(".job-details-jobs-unified-top-card__job-title, h1.t-24")
-                    role_title = title_el.inner_text().strip() if title_el.count() > 0 else ""
+                    role_title = title_el.first.inner_text().strip() if title_el.count() > 0 else ""
                     company_el = page.locator(".job-details-jobs-unified-top-card__primary-description-container a, .job-details-jobs-unified-top-card__company-name")
-                    company = company_el.inner_text().strip() if company_el.count() > 0 else ""
+                    company = company_el.first.inner_text().strip() if company_el.count() > 0 else ""
 
                     # Top Card / Applicant description container
                     top_card_desc = page.locator(".job-details-jobs-unified-top-card__primary-description-container, .jobs-unified-top-card__subtitle-primary-grouping")
-                    desc_text = top_card_desc.inner_text() if top_card_desc.count() > 0 else ""
+                    desc_text = top_card_desc.first.inner_text() if top_card_desc.count() > 0 else ""
 
                     # Check Early-Bird criteria (< applicant_threshold applicants)
                     applicant_count = self._parse_linkedin_applicants(desc_text)
@@ -52,7 +52,7 @@ class JobScraper:
 
                     # Full Job Description text
                     jd_el = page.locator("#job-details, .jobs-description__content")
-                    jd_text = jd_el.inner_text().strip() if jd_el.count() > 0 else ""
+                    jd_text = jd_el.first.inner_text().strip() if jd_el.count() > 0 else ""
 
                     jobs.append({
                         "platform": "LinkedIn",
@@ -121,21 +121,21 @@ class JobScraper:
                         continue
 
                     title_el = card.locator("h2.jobTitle span, a[data-jk]")
-                    role_title = title_el.inner_text().strip() if title_el.count() > 0 else ""
+                    role_title = title_el.first.inner_text().strip() if title_el.count() > 0 else ""
                     comp_el = card.locator("[data-testid='company-name']")
-                    company = comp_el.inner_text().strip() if comp_el.count() > 0 else ""
+                    company = comp_el.first.inner_text().strip() if comp_el.count() > 0 else ""
 
                     # Indeed job id
                     job_id = card.get_attribute("data-jk") or ""
 
                     # Early bird: check date badge (Just posted / Today)
                     date_el = card.locator(".date, [data-testid='myJobsStateDate']")
-                    date_text = date_el.inner_text().lower() if date_el.count() > 0 else ""
+                    date_text = date_el.first.inner_text().lower() if date_el.count() > 0 else ""
                     passed_early_bird = any(b in date_text for b in ["just posted", "today", "active", "1 day ago"])
 
                     # JD text
                     jd_pane = page.locator("#jobDescriptionText")
-                    jd_text = jd_pane.inner_text().strip() if jd_pane.count() > 0 else ""
+                    jd_text = jd_pane.first.inner_text().strip() if jd_pane.count() > 0 else ""
 
                     jobs.append({
                         "platform": "Indeed",
