@@ -1,0 +1,7 @@
+# Daily Discovery at 06:00 AM JST
+0 6 * * * cd /app && /usr/local/bin/python run_daily_discovery.py >> /app/logs/discovery.log 2>&1
+
+# Hourly Queue Worker (08:00 - 23:00 JST)
+0 8-23 * * * cd /app && /usr/local/bin/python run_queue_worker.py >> /app/logs/worker.log 2>&1
+
+# Empty line required by cron

@@ -1,0 +1,46 @@
+# Job Search Criteria
+search:
+  keywords:
+    - "Open RAN"
+    - "RIC"
+    - "5G Optimization"
+    - "Telecom Data Engineer"
+    - "Telecom AI"
+  target_locations:
+    - name: "Japan"
+      timezone: "Asia/Tokyo"
+    - name: "Singapore"
+      timezone: "Asia/Singapore"
+    - name: "United States"
+      timezone: "America/New_York"
+    - name: "United Kingdom"
+      timezone: "Europe/London"
+    - name: "Germany"
+      timezone: "Europe/Berlin"
+  date_posted_filter: "past_24h" # fromage=1 / f_TPR=r86400
+  easy_apply_only: true
+
+# Guardrails & Safety
+safety:
+  max_daily_applications: 20
+  applicant_threshold: 25 # Only apply if applicants < 25
+  action_delay_min_seconds: 2
+  action_delay_max_seconds: 6
+  typing_delay_ms: 30
+  retry_attempts: 2
+  request_timeout_seconds: 30
+
+# AI Scoring Thresholds
+ai_matching:
+  model_evaluator: "gemini-2.5-flash" # Atau "gpt-4o-mini"
+  model_writer: "gemini-2.5-flash"    # Atau "gemini-1.5-pro" / "gpt-4o"
+  min_match_score: 80 # Score range 0 - 100
+  dedup_company_ratio: 85 # Fuzzy match threshold
+  dedup_role_ratio: 80
+  dedup_jaccard_ratio: 75
+
+# Schedule Targets
+scheduling:
+  target_local_hour: 9 # 09:00 AM in target timezone
+  discovery_cron: "0 6 * * *" # 06:00 AM JST
+  worker_cron: "0 8-23 * * *" # Hourly worker 08:00 - 23:00 JST

@@ -1,0 +1,26 @@
+# Ignore local Python virtual environments
+.venv/
+venv/
+ENV/
+
+# Sensitive plaintext files
+.env
+AGENT_MASTER_KEY.txt
+
+# Git & OS metadata
+.git/
+.gitignore
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Temporary files
+logs/*.log
+generated_cvs/*

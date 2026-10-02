@@ -1,0 +1,27 @@
+# Core Agent & Automation
+playwright>=1.49.0
+
+# LLM & AI
+openai>=1.55.0
+google-genai>=1.0.0
+pydantic>=2.9.0
+
+# Security & Encryption
+cryptography>=43.0.0
+
+# Document Processing
+docxtpl>=0.19.0
+python-docx>=1.1.0
+
+# Deduplication & Matching
+rapidfuzz>=3.10.0
+
+# Cloud & Spreadsheet Tracking
+gspread>=6.1.0
+google-auth>=2.35.0
+
+# Utilities
+requests>=2.32.0
+pyyaml>=6.0.2
+tzdata>=2024.2
+python-dotenv>=1.0.1

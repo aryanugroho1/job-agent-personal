@@ -1,0 +1,32 @@
+# Virtual Environment
+.venv/
+venv/
+ENV/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+
+# Sensitive Credentials & Plaintext Secrets
+.env
+*.pem
+*.key
+AGENT_MASTER_KEY.txt
+config/service_account.json
+config/linkedin_cookies.json
+config/indeed_cookies.json
+config/*_state.json
+cookies.json
+PRD.md
+
+# Generated output files
+generated_cvs/
+logs/*.log
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

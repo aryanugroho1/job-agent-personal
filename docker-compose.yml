@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  job-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: linkedin-job-agent
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Tokyo
+      - AGENT_MASTER_KEY=${AGENT_MASTER_KEY}
+    volumes:
+      # Persistent storage in Coolify for generated resumes, logs, and session cookies
+      - job-agent-data:/app/generated_cvs
+      - job-agent-logs:/app/logs
+      - job-agent-config:/app/config
+
+volumes:
+  job-agent-data:
+  job-agent-logs:
+  job-agent-config:
