@@ -60,6 +60,9 @@ def main():
         li_auth = AuthManager("linkedin")
         li_auth.load_cookies(context)
 
+        in_auth = AuthManager("indeed")
+        in_auth.load_cookies(context)
+
         scraper = JobScraper(context)
 
         # Iterate keywords & locations

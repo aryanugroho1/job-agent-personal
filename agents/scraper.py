@@ -94,6 +94,7 @@ class JobScraper:
     def scrape_indeed(self, keyword: str, location: str, limit: int = 15) -> list[dict]:
         """
         Discovers Indeed jobs posted in last 24h (fromage=1) with Easily Apply.
+        Automatically uses localized Indeed domain based on country.
         """
         page = self.context.new_page()
         jobs = []
@@ -101,13 +102,26 @@ class JobScraper:
         try:
             encoded_kw = urllib.parse.quote(keyword)
             encoded_loc = urllib.parse.quote(location)
-            # fromage=1: past 24h
-            url = f"https://www.indeed.com/jobs?q={encoded_kw}&l={encoded_loc}&fromage=1"
+            
+            # Country-specific domain mapping for Indeed
+            loc_lower = location.lower()
+            if any(k in loc_lower for k in ["japan", "tokyo", "osaka"]):
+                base_url = "https://jp.indeed.com"
+            elif "singapore" in loc_lower:
+                base_url = "https://sg.indeed.com"
+            elif any(k in loc_lower for k in ["united kingdom", "london", "uk"]):
+                base_url = "https://uk.indeed.com"
+            elif any(k in loc_lower for k in ["germany", "berlin", "munich"]):
+                base_url = "https://de.indeed.com"
+            else:
+                base_url = "https://www.indeed.com"
+
+            url = f"{base_url}/jobs?q={encoded_kw}&l={encoded_loc}&fromage=1"
             page.goto(url, wait_until="domcontentloaded", timeout=45000)
             time.sleep(3)
 
             cards = page.locator(".job_seen_beacon, .cardOutline").all()
-            print(f"[Indeed Scraper] Found {len(cards)} job cards for '{keyword}' in '{location}'")
+            print(f"[Indeed Scraper] Found {len(cards)} job cards for '{keyword}' in '{location}' ({base_url})")
 
             for card in cards[:limit]:
                 try:
@@ -115,8 +129,12 @@ class JobScraper:
                     card.click(timeout=5000)
                     time.sleep(1.5)
 
-                    # Check Easily apply badge
-                    has_easy_apply = card.locator("[data-testid='indeedApply'], .iaIcon").count() > 0 or "Easily apply" in card.inner_text()
+                    # Check Easily apply badge (English & Japanese)
+                    card_text = card.inner_text().lower()
+                    has_easy_apply = (
+                        card.locator("[data-testid='indeedApply'], .iaIcon, .indeed-apply-widget").count() > 0
+                        or any(k in card_text for k in ["easily apply", "apply now", "カンタン応募", "かんたん応募", "プロフィールだけでカンタン応募", "履歴書のみで応募"])
+                    )
                     if not has_easy_apply:
                         continue
 
@@ -127,11 +145,24 @@ class JobScraper:
 
                     # Indeed job id
                     job_id = card.get_attribute("data-jk") or ""
+                    if not job_id:
+                        a_el = card.locator("a[data-jk]")
+                        if a_el.count() > 0:
+                            job_id = a_el.first.get_attribute("data-jk") or ""
+                    if not job_id:
+                        h2_a = card.locator("h2.jobTitle a")
+                        if h2_a.count() > 0:
+                            job_id = h2_a.first.get_attribute("data-jk") or ""
 
-                    # Early bird: check date badge (Just posted / Today)
+                    # Direct job URL
+                    job_url = f"{base_url}/viewjob?jk={job_id}" if job_id else page.url
+
+                    # Early bird: fromage=1 already ensures <=24h postings.
+                    # Exclude only if marked with older age tags (e.g. reposted/sponsored)
                     date_el = card.locator(".date, [data-testid='myJobsStateDate']")
                     date_text = date_el.first.inner_text().lower() if date_el.count() > 0 else ""
-                    passed_early_bird = any(b in date_text for b in ["just posted", "today", "active", "1 day ago"])
+                    is_old = any(b in date_text for b in ["30+", "14+", "7+", "30日前", "14日前", "7日前"])
+                    passed_early_bird = not is_old
 
                     # JD text
                     jd_pane = page.locator("#jobDescriptionText")
@@ -139,11 +170,11 @@ class JobScraper:
 
                     jobs.append({
                         "platform": "Indeed",
-                        "job_id": f"in-{job_id}",
+                        "job_id": f"in-{job_id}" if job_id else f"in-{hash(role_title + company)}",
                         "company": company,
                         "role_title": role_title,
                         "location": location,
-                        "url": page.url,
+                        "url": job_url,
                         "applicant_count": 0,
                         "passed_early_bird": passed_early_bird,
                         "description": jd_text

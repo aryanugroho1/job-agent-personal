@@ -66,6 +66,9 @@ def main():
         li_auth = AuthManager("linkedin")
         li_auth.load_cookies(context)
 
+        in_auth = AuthManager("indeed")
+        in_auth.load_cookies(context)
+
         applier = EasyApplyRunner(context)
 
         for job in due_jobs:
@@ -77,10 +80,18 @@ def main():
             role = job.get("role_title", "")
             company = job.get("company", "")
             pdf_path = job.get("pdf_path", "")
-            job_url = job.get("url") or f"https://www.linkedin.com/jobs/view/{job.get('job_id', '').replace('li-', '')}"
+            
+            job_id_clean = str(job.get("job_id", "")).replace("li-", "").replace("in-", "")
+            if platform == "linkedin":
+                job_url = job.get("url") or f"https://www.linkedin.com/jobs/view/{job_id_clean}"
+            else:
+                loc_lower = str(job.get("location", "")).lower()
+                base_indeed = "https://jp.indeed.com" if any(k in loc_lower for k in ["japan", "tokyo", "osaka"]) else "https://www.indeed.com"
+                job_url = job.get("url") or f"{base_indeed}/viewjob?jk={job_id_clean}"
+
             row_num = job.get("_row_number", 0)
 
-            print(f"\n💼 Applying for '{role}' at '{company}'...")
+            print(f"\n💼 Applying for '{role}' at '{company}' ({platform.upper()})...")
 
             if platform == "linkedin":
                 result = applier.apply_linkedin(
@@ -89,9 +100,15 @@ def main():
                     role_title=role,
                     company=company
                 )
+            elif platform == "indeed":
+                result = applier.apply_indeed(
+                    job_url=job_url,
+                    pdf_path=pdf_path,
+                    role_title=role,
+                    company=company
+                )
             else:
-                # Indeed apply runner
-                result = {"status": "MANUAL_REVIEW", "notes": "Indeed automated form runner pending manual review"}
+                result = {"status": "FAILED", "notes": f"Unsupported platform: {platform}"}
 
             status = result["status"]
             notes = result["notes"]
