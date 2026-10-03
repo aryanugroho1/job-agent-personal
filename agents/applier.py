@@ -21,8 +21,12 @@ class EasyApplyRunner:
             page.goto(job_url, wait_until="domcontentloaded", timeout=40000)
             human_jitter(2, 4)
 
-            # Locate Easy Apply button
-            apply_btn = page.locator(".jobs-apply-button, button.jobs-apply-button--top-card")
+            # Locate Easy Apply button (English & Japanese)
+            apply_btn = page.locator(
+                ".jobs-apply-button, button.jobs-apply-button--top-card, "
+                "button:has-text('Easy Apply'), button:has-text('簡単応募'), "
+                "[data-control-name='jobdetails_topcard_inapply']"
+            )
             if apply_btn.count() == 0:
                 return {"status": "FAILED", "notes": "Easy Apply button not found or already applied"}
 
@@ -30,7 +34,7 @@ class EasyApplyRunner:
             human_jitter(2, 3)
 
             # Check if modal opens
-            modal = page.locator(".jobs-easy-apply-modal, [data-test-modal-id='easy-apply-modal']")
+            modal = page.locator(".jobs-easy-apply-modal, [data-test-modal-id='easy-apply-modal'], div[role='dialog']")
             if modal.count() == 0:
                 return {"status": "FAILED", "notes": "Modal did not open"}
 
@@ -40,13 +44,20 @@ class EasyApplyRunner:
 
                 # 1. Check for Resume upload input
                 file_input = page.locator("input[type='file']")
-                if file_input.count() > 0 and Path(pdf_path).exists():
-                    file_input.first.set_input_files(pdf_path)
-                    print(f"[EasyApply] Uploaded tailored resume: {pdf_path}")
+                target_pdf = Path(pdf_path)
+                if not target_pdf.exists():
+                    target_pdf = Path("generated_cvs") / Path(pdf_path).name
+
+                if file_input.count() > 0 and target_pdf.exists():
+                    file_input.first.set_input_files(str(target_pdf))
+                    print(f"[EasyApply] Uploaded tailored resume: {target_pdf}")
                     human_jitter(2, 3)
 
                 # 2. Check for cover letter / message to hiring manager textarea
-                cover_note_box = page.locator("textarea[name*='cover'], textarea[id*='cover'], textarea[aria-label*='cover'], textarea[name*='message']")
+                cover_note_box = page.locator(
+                    "textarea[name*='cover'], textarea[id*='cover'], textarea[aria-label*='cover'], "
+                    "textarea[name*='message'], textarea[aria-label*='メッセージ']"
+                )
                 if cover_note_box.count() > 0 and not cover_note_box.first.input_value():
                     print("[EasyApply] Detected cover letter/message box. Generating human-style note...")
                     note = generate_human_cover_note(role_title, company, jd_text)
@@ -54,16 +65,22 @@ class EasyApplyRunner:
                     cover_note_box.first.press_sequentially(note, delay=30)
                     human_jitter(2, 3)
 
-                # 3. Check for Submit Application button
-                submit_btn = page.locator("button[aria-label='Submit application'], button:has-text('Submit application')")
+                # 3. Check for Submit Application button (English & Japanese)
+                submit_btn = page.locator(
+                    "button[aria-label='Submit application'], button:has-text('Submit application'), "
+                    "button:has-text('応募を送信'), button:has-text('送信'), button[data-live-test-easy-apply-submit-button]"
+                )
                 if submit_btn.count() > 0:
                     submit_btn.first.click()
                     human_jitter(3, 5)
                     print(f"🎉 [EasyApply] Application submitted successfully for {role_title} at {company}!")
                     return {"status": "APPLIED", "notes": "Application successfully submitted via Easy Apply"}
 
-                # 4. Check for Next button or Review button
-                next_btn = page.locator("button[aria-label='Continue to next step'], button:has-text('Next'), button:has-text('Review')")
+                # 4. Check for Next button or Review button (English & Japanese)
+                next_btn = page.locator(
+                    "button[aria-label='Continue to next step'], button:has-text('Next'), button:has-text('Review'), "
+                    "button:has-text('次へ'), button:has-text('確認'), button[data-live-test-easy-apply-next-button]"
+                )
                 if next_btn.count() > 0:
                     next_btn.first.click()
                 else:

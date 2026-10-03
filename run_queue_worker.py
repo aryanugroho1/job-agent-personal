@@ -23,8 +23,16 @@ from agents.notifier import send_alert
 MAX_DAILY_APPLICATIONS = 20
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Queue Worker for Automated Job Applications")
+    parser.add_argument("--now", "--force", action="store_true", help="Apply immediately to QUEUED jobs without waiting for scheduled_utc")
+    parser.add_argument("--limit", type=int, default=MAX_DAILY_APPLICATIONS, help="Max applications to process in this run")
+    args = parser.parse_args()
+
     print("=" * 60)
     print(f"⏰ [Phase 2: Queue Worker Running] {datetime.now(timezone.utc).isoformat()}")
+    if args.now:
+        print("⚡ [IMMEDIATE MODE ENABLED] Bypassing scheduled_utc filter.")
     print("=" * 60)
 
     # 1. Load decrypted env in RAM
@@ -37,22 +45,25 @@ def main():
 
     # Filter due jobs
     due_jobs = []
-    for job in queued_jobs:
-        sched_str = job.get("scheduled_utc")
-        if not sched_str:
-            continue
-        try:
-            sched_dt = datetime.strptime(str(sched_str), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-            if sched_dt <= now_utc:
-                due_jobs.append(job)
-        except Exception as e:
-            print(f"[Worker Warning] Could not parse scheduled_utc '{sched_str}': {e}")
+    if args.now:
+        due_jobs = queued_jobs[:args.limit]
+    else:
+        for job in queued_jobs:
+            sched_str = job.get("scheduled_utc")
+            if not sched_str:
+                continue
+            try:
+                sched_dt = datetime.strptime(str(sched_str), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                if sched_dt <= now_utc:
+                    due_jobs.append(job)
+            except Exception as e:
+                print(f"[Worker Warning] Could not parse scheduled_utc '{sched_str}': {e}")
 
     if not due_jobs:
         print("💤 No queued jobs due for execution at this hour. Exiting clean.")
         return
 
-    print(f"🎯 Found {len(due_jobs)} jobs due for application (09:00 AM target reached).")
+    print(f"🎯 Found {len(due_jobs)} jobs ready for application.")
 
     # 3. Process jobs with Playwright (1 tab sequentially)
     applied_count = 0
@@ -71,9 +82,10 @@ def main():
 
         applier = EasyApplyRunner(context)
 
+        max_exec_limit = min(MAX_DAILY_APPLICATIONS, args.limit)
         for job in due_jobs:
-            if applied_count >= MAX_DAILY_APPLICATIONS:
-                print("🛑 Daily safety limit of 20 applications reached. Postponing remaining jobs.")
+            if applied_count >= max_exec_limit:
+                print(f"🛑 Execution limit of {max_exec_limit} applications reached. Stopping run.")
                 break
 
             platform = str(job.get("platform", "LinkedIn")).lower()
