@@ -32,8 +32,8 @@ safety:
 
 # AI Scoring Thresholds
 ai_matching:
-  model_evaluator: "gemini-2.5-flash" # Atau "gpt-4o-mini"
-  model_writer: "gemini-2.5-flash"    # Atau "gemini-1.5-pro" / "gpt-4o"
+  model_evaluator: "gemini-flash-lite-latest"
+  model_writer: "gemini-flash-lite-latest"
   min_match_score: 80 # Score range 0 - 100
   dedup_company_ratio: 85 # Fuzzy match threshold
   dedup_role_ratio: 80

@@ -48,7 +48,10 @@ Return STRICTLY valid JSON with no markdown wrapping:
             from google.genai import types
 
             client = genai.Client(api_key=gemini_key)
-            models_to_try = [model, "gemini-3-flash-preview", "gemini-flash-latest"] if model else ["gemini-3-flash-preview", "gemini-flash-latest"]
+            models_to_try = [model] if model else []
+            for default_m in ["gemini-flash-lite-latest", "gemini-3.1-flash-lite-preview", "gemini-flash-latest", "gemini-3-flash-preview"]:
+                if default_m not in models_to_try:
+                    models_to_try.append(default_m)
             for m in models_to_try:
                 try:
                     response = client.models.generate_content(
