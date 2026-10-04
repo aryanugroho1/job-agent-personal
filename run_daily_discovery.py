@@ -49,16 +49,23 @@ def main():
 
     raw_candidates = []
 
-    # 3. Launch Playwright Headless
+    # 3. Launch Playwright Headless with anti-automation flags
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled", "--no-sandbox"]
+        )
+        li_state = "config/linkedin_state.json" if Path("config/linkedin_state.json").exists() else None
         context = browser.new_context(
+            storage_state=li_state,
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         )
+        context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
         # Auth setup
-        li_auth = AuthManager("linkedin")
-        li_auth.load_cookies(context)
+        if not li_state:
+            li_auth = AuthManager("linkedin")
+            li_auth.load_cookies(context)
 
         in_auth = AuthManager("indeed")
         in_auth.load_cookies(context)

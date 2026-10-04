@@ -46,6 +46,9 @@ def is_duplicate(
     r1 = normalize_text(job1.get("role_title", ""))
     r2 = normalize_text(job2.get("role_title", ""))
 
+    if not c1 or not c2 or not r1 or not r2:
+        return False
+
     comp_ratio = fuzz.token_sort_ratio(c1, c2)
     role_ratio = fuzz.token_sort_ratio(r1, r2)
 

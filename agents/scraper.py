@@ -107,20 +107,47 @@ class JobScraper:
             loc_lower = location.lower()
             if any(k in loc_lower for k in ["japan", "tokyo", "osaka"]):
                 base_url = "https://jp.indeed.com"
+                query_loc = "" if loc_lower == "japan" else location
             elif "singapore" in loc_lower:
                 base_url = "https://sg.indeed.com"
+                query_loc = ""
             elif any(k in loc_lower for k in ["united kingdom", "london", "uk"]):
                 base_url = "https://uk.indeed.com"
+                query_loc = "" if loc_lower in ["united kingdom", "uk"] else location
             elif any(k in loc_lower for k in ["germany", "berlin", "munich"]):
                 base_url = "https://de.indeed.com"
+                query_loc = "" if loc_lower == "germany" else location
             else:
                 base_url = "https://www.indeed.com"
+                query_loc = location
 
-            url = f"{base_url}/jobs?q={encoded_kw}&l={encoded_loc}&fromage=1"
+            encoded_kw = urllib.parse.quote(keyword)
+            encoded_loc = urllib.parse.quote(query_loc) if query_loc else ""
+            loc_param = f"&l={encoded_loc}" if encoded_loc else ""
+            url = f"{base_url}/jobs?q={encoded_kw}{loc_param}&fromage=1"
             page.goto(url, wait_until="domcontentloaded", timeout=45000)
             time.sleep(3)
 
-            cards = page.locator(".job_seen_beacon, .cardOutline").all()
+            # Check if Cloudflare challenge is present and allow resolution
+            if "Just a moment" in page.title():
+                for _ in range(8):
+                    time.sleep(1)
+                    if "Just a moment" not in page.title():
+                        break
+
+            cards = page.locator(".job_seen_beacon, .cardOutline, div[data-jk]").all()
+            if len(cards) == 0 and "fromage=1" in url:
+                # Fallback to last 7 days for niche tech roles if past 24h yields 0
+                url_7d = f"{base_url}/jobs?q={encoded_kw}{loc_param}&fromage=7"
+                page.goto(url_7d, wait_until="domcontentloaded", timeout=45000)
+                time.sleep(3)
+                if "Just a moment" in page.title():
+                    for _ in range(8):
+                        time.sleep(1)
+                        if "Just a moment" not in page.title():
+                            break
+                cards = page.locator(".job_seen_beacon, .cardOutline, div[data-jk]").all()
+
             print(f"[Indeed Scraper] Found {len(cards)} job cards for '{keyword}' in '{location}' ({base_url})")
 
             for card in cards[:limit]:

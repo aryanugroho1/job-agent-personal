@@ -67,15 +67,19 @@ def main():
     print(f"🎯 Found {len(due_jobs)} jobs ready for application.")
 
     # 3. Process jobs with Playwright (1 tab sequentially)
-    applied_count = 0
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        applied_count = 0
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled", "--no-sandbox"]
+        )
         # Setup session state & cookies
         li_state = "config/linkedin_state.json" if Path("config/linkedin_state.json").exists() else None
         context = browser.new_context(
             storage_state=li_state,
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         )
+        context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
         if not li_state:
             li_auth = AuthManager("linkedin")
