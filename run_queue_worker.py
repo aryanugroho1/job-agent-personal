@@ -6,6 +6,7 @@ Enforces max 20 applications/day guardrail and human anti-bot jitter.
 """
 import sys
 import os
+from pathlib import Path
 from datetime import datetime, timezone
 from playwright.sync_api import sync_playwright
 
@@ -69,13 +70,16 @@ def main():
     applied_count = 0
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
+        # Setup session state & cookies
+        li_state = "config/linkedin_state.json" if Path("config/linkedin_state.json").exists() else None
         context = browser.new_context(
+            storage_state=li_state,
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         )
 
-        # Setup cookies
-        li_auth = AuthManager("linkedin")
-        li_auth.load_cookies(context)
+        if not li_state:
+            li_auth = AuthManager("linkedin")
+            li_auth.load_cookies(context)
 
         in_auth = AuthManager("indeed")
         in_auth.load_cookies(context)
@@ -94,12 +98,19 @@ def main():
             pdf_path = job.get("pdf_path", "")
             
             job_id_clean = str(job.get("job_id", "")).replace("li-", "").replace("in-", "")
+            raw_url = str(job.get("url") or "")
             if platform == "linkedin":
-                job_url = job.get("url") or f"https://www.linkedin.com/jobs/view/{job_id_clean}"
+                if not raw_url or "/jobs/search" in raw_url:
+                    job_url = f"https://www.linkedin.com/jobs/view/{job_id_clean}/"
+                else:
+                    job_url = raw_url
             else:
                 loc_lower = str(job.get("location", "")).lower()
                 base_indeed = "https://jp.indeed.com" if any(k in loc_lower for k in ["japan", "tokyo", "osaka"]) else "https://www.indeed.com"
-                job_url = job.get("url") or f"{base_indeed}/viewjob?jk={job_id_clean}"
+                if not raw_url or "/jobs?" in raw_url:
+                    job_url = f"{base_indeed}/viewjob?jk={job_id_clean}"
+                else:
+                    job_url = raw_url
 
             row_num = job.get("_row_number", 0)
 
@@ -124,6 +135,7 @@ def main():
 
             status = result["status"]
             notes = result["notes"]
+            print(f"👉 Result: {status} | Notes: {notes}")
             applied_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S") if status == "APPLIED" else ""
 
             if row_num:
