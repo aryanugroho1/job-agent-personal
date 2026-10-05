@@ -12,7 +12,7 @@ def human_jitter(min_s: float = 2.0, max_s: float = 5.0):
 def auto_answer_screening_questions(container: Locator | Page):
     """
     Intelligently auto-answers screening questions:
-    - Radio buttons: work authorization (Yes), visa sponsorship (No), commute/education (Yes)
+    - Radio buttons: work authorization (Yes), visa sponsorship (Yes), commute/education (Yes)
     - Numeric & text fields: years of experience (8), salary (Negotiable), notice period (30 days)
     - Checkboxes: consents and agreements (checked)
     - Dropdowns: target positive/fluent/experienced answers
@@ -31,8 +31,10 @@ def auto_answer_screening_questions(container: Locator | Page):
 
             # Determine desired answer based on prompt keywords
             target_val = "Yes"
-            if any(w in legend for w in ["sponsorship", "require visa", "visa sponsorship", "スポンサーシップ", "ビザ支援", "visum", "sponsorship required"]):
+            if any(w in legend for w in ["criminal", "felony", "conviction", "disciplinary", "offense"]):
                 target_val = "No"
+            elif any(w in legend for w in ["sponsorship", "require visa", "visa sponsorship", "スポンサーシップ", "ビザ支援", "visum", "sponsorship required"]):
+                target_val = "Yes"
             elif any(w in legend for w in ["authorized", "right to work", "legally", "就労", "許可", "relocate", "commute", "background", "clearance", "degree", "education", "bachelor", "master", "hybrid"]):
                 target_val = "Yes"
 
