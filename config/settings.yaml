@@ -23,7 +23,7 @@ search:
 # Guardrails & Safety
 safety:
   max_daily_applications: 20
-  applicant_threshold: 25 # Only apply if applicants < 25
+  applicant_threshold: 50 # Only apply if applicants <= 50
   action_delay_min_seconds: 2
   action_delay_max_seconds: 6
   typing_delay_ms: 30

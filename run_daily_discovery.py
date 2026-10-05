@@ -45,7 +45,7 @@ def main():
     target_locations = settings["search"]["target_locations"]
     min_score = settings["ai_matching"]["min_match_score"]
 
-    applicant_threshold = settings.get("safety", {}).get("applicant_threshold", 25)
+    applicant_threshold = settings.get("safety", {}).get("applicant_threshold", 50)
 
     raw_candidates = []
 

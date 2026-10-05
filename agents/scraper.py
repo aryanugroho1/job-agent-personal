@@ -7,10 +7,10 @@ class JobScraper:
     def __init__(self, context: BrowserContext):
         self.context = context
 
-    def scrape_linkedin(self, keyword: str, location: str, limit: int = 15, applicant_threshold: int = 25) -> list[dict]:
+    def scrape_linkedin(self, keyword: str, location: str, limit: int = 15, applicant_threshold: int = 50) -> list[dict]:
         """
         Discovers LinkedIn jobs with Easy Apply filter and posted past 24h.
-        Applies early-bird filter (< applicant_threshold applicants).
+        Applies early-bird filter (<= applicant_threshold applicants).
         """
         page = self.context.new_page()
         jobs = []
@@ -44,10 +44,10 @@ class JobScraper:
                     top_card_desc = page.locator(".job-details-jobs-unified-top-card__primary-description-container, .jobs-unified-top-card__subtitle-primary-grouping")
                     desc_text = top_card_desc.first.inner_text() if top_card_desc.count() > 0 else ""
 
-                    # Check Early-Bird criteria (< applicant_threshold applicants)
+                    # Check Early-Bird criteria (<= applicant_threshold applicants)
                     applicant_count = self._parse_linkedin_applicants(desc_text)
                     passed_early_bird = (applicant_count is not None and applicant_count <= applicant_threshold) or (
-                        any(s in desc_text.lower() for s in ["under 10", "first 25", "under 25"])
+                        any(s in desc_text.lower() for s in ["under 10", "first 25", "under 25", "first 50", "under 50", "over 25"])
                     )
 
                     # Full Job Description text
@@ -79,12 +79,20 @@ class JobScraper:
         if not text:
             return None
         lower = text.lower()
-        if "under 10 applicants" in lower:
+        if "under 10" in lower:
             return 5
-        if "first 25 applicants" in lower or "under 25" in lower:
+        if "first 25" in lower or "under 25" in lower:
             return 20
+        if "over 25" in lower:
+            return 35
+        if "first 50" in lower or "under 50" in lower:
+            return 45
+        if "over 100" in lower or "over 200" in lower:
+            return 100
+        if "over 50" in lower:
+            return 60
         if "over" in lower:
-            return 50
+            return 60
 
         match = re.search(r"(\d+)\s+applicant", lower)
         if match:
