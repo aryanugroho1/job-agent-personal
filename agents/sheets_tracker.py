@@ -98,6 +98,44 @@ class SheetsTracker:
             print(f"[SheetsTracker Error] Failed reading queued jobs: {e}")
             return []
 
+    def get_manual_review_jobs(self) -> list[dict]:
+        """
+        Retrieves all jobs with status == 'MANUAL_REVIEW'.
+        """
+        if not self.sheet and not self.connect():
+            return []
+
+        try:
+            records = self.sheet.get_all_records()
+            manual = []
+            for idx, r in enumerate(records, start=2):
+                if r.get("status") == "MANUAL_REVIEW":
+                    r["_row_number"] = idx
+                    manual.append(r)
+            return manual
+        except Exception as e:
+            print(f"[SheetsTracker Error] Failed reading manual review jobs: {e}")
+            return []
+
+    def get_job_by_row(self, row_number: int) -> dict | None:
+        """
+        Retrieves a single job record by its row number in the sheet.
+        """
+        if not self.sheet and not self.connect():
+            return None
+
+        try:
+            row_vals = self.sheet.row_values(row_number)
+            if not row_vals:
+                return None
+            headers = self.sheet.row_values(1)
+            record = dict(zip(headers, row_vals))
+            record["_row_number"] = row_number
+            return record
+        except Exception as e:
+            print(f"[SheetsTracker Error] Failed reading row {row_number}: {e}")
+            return None
+
     def update_job_status(self, row_number: int, status: str, notes: str = "", applied_at: str = ""):
         """
         Updates the status, applied_at, and notes columns for a specific row.

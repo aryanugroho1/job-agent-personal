@@ -28,11 +28,17 @@ def main():
     parser = argparse.ArgumentParser(description="Queue Worker for Automated Job Applications")
     parser.add_argument("--now", "--force", action="store_true", help="Apply immediately to QUEUED jobs without waiting for scheduled_utc")
     parser.add_argument("--limit", type=int, default=MAX_DAILY_APPLICATIONS, help="Max applications to process in this run")
+    parser.add_argument("--row", type=int, help="Apply directly to a specific row number in Google Sheets for instant verification")
+    parser.add_argument("--retry-manual", action="store_true", help="Retry applying to jobs currently marked as MANUAL_REVIEW")
     args = parser.parse_args()
 
     print("=" * 60)
     print(f"⏰ [Phase 2: Queue Worker Running] {datetime.now(timezone.utc).isoformat()}")
-    if args.now:
+    if args.row:
+        print(f"🎯 [SINGLE ROW TEST MODE] Targeting Row #{args.row}")
+    elif args.retry_manual:
+        print("🔄 [RETRY MANUAL MODE] Targeting jobs marked as MANUAL_REVIEW")
+    elif args.now:
         print("⚡ [IMMEDIATE MODE ENABLED] Bypassing scheduled_utc filter.")
     print("=" * 60)
 
@@ -41,14 +47,25 @@ def main():
 
     # 2. Query Google Sheets queue
     sheets = SheetsTracker()
-    queued_jobs = sheets.get_queued_jobs()
     now_utc = datetime.now(timezone.utc)
 
-    # Filter due jobs
+    # Select target jobs
     due_jobs = []
-    if args.now:
+    if args.row:
+        single_job = sheets.get_job_by_row(args.row)
+        if single_job:
+            due_jobs = [single_job]
+        else:
+            print(f"❌ Could not find valid record at Row #{args.row}")
+            return
+    elif args.retry_manual:
+        manual_jobs = sheets.get_manual_review_jobs()
+        due_jobs = manual_jobs[:args.limit]
+    elif args.now:
+        queued_jobs = sheets.get_queued_jobs()
         due_jobs = queued_jobs[:args.limit]
     else:
+        queued_jobs = sheets.get_queued_jobs()
         for job in queued_jobs:
             sched_str = job.get("scheduled_utc")
             if not sched_str:
@@ -61,7 +78,7 @@ def main():
                 print(f"[Worker Warning] Could not parse scheduled_utc '{sched_str}': {e}")
 
     if not due_jobs:
-        print("💤 No queued jobs due for execution at this hour. Exiting clean.")
+        print("💤 No queued or eligible jobs due for execution. Exiting clean.")
         return
 
     print(f"🎯 Found {len(due_jobs)} jobs ready for application.")
