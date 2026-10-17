@@ -15,9 +15,9 @@ __pycache__/
 *.key
 AGENT_MASTER_KEY.txt
 config/service_account.json
-config/linkedin_cookies.json
-config/indeed_cookies.json
+config/*_cookies.json
 config/*_state.json
+config/*_user_data/
 cookies.json
 PRD.md
 

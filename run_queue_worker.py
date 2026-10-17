@@ -19,6 +19,7 @@ from agents.crypto_env import load_encrypted_env
 from agents.auth_manager import AuthManager
 from agents.sheets_tracker import SheetsTracker
 from agents.applier import EasyApplyRunner
+from agents.amazon_applier import AmazonApplier
 from agents.notifier import send_alert
 
 MAX_DAILY_APPLICATIONS = 20
@@ -30,6 +31,7 @@ def main():
     parser.add_argument("--limit", type=int, default=MAX_DAILY_APPLICATIONS, help="Max applications to process in this run")
     parser.add_argument("--row", type=int, help="Apply directly to a specific row number in Google Sheets for instant verification")
     parser.add_argument("--retry-manual", action="store_true", help="Retry applying to jobs currently marked as MANUAL_REVIEW")
+    parser.add_argument("--auto-submit", action="store_true", help="Enable automatic submission for Amazon instead of co-pilot review")
     args = parser.parse_args()
 
     print("=" * 60)
@@ -105,7 +107,11 @@ def main():
         in_auth = AuthManager("indeed")
         in_auth.load_cookies(context)
 
+        amz_auth = AuthManager("amazon")
+        amz_auth.load_cookies(context)
+
         applier = EasyApplyRunner(context)
+        amazon_applier = AmazonApplier(context, auto_submit=args.auto_submit)
 
         max_exec_limit = min(MAX_DAILY_APPLICATIONS, args.limit)
         for job in due_jobs:
@@ -118,13 +124,15 @@ def main():
             company = job.get("company", "")
             pdf_path = job.get("pdf_path", "")
             
-            job_id_clean = str(job.get("job_id", "")).replace("li-", "").replace("in-", "")
+            job_id_clean = str(job.get("job_id", "")).replace("li-", "").replace("in-", "").replace("amz-", "")
             raw_url = str(job.get("url") or "")
             if platform == "linkedin":
                 if not raw_url or "/jobs/search" in raw_url:
                     job_url = f"https://www.linkedin.com/jobs/view/{job_id_clean}/"
                 else:
                     job_url = raw_url
+            elif platform == "amazon":
+                job_url = str(job.get("apply_url") or job.get("url") or f"https://account.amazon.jobs/jobs/{job_id_clean}/apply")
             else:
                 loc_lower = str(job.get("location", "")).lower()
                 base_indeed = "https://jp.indeed.com" if any(k in loc_lower for k in ["japan", "tokyo", "osaka"]) else "https://www.indeed.com"
@@ -150,6 +158,14 @@ def main():
                     pdf_path=pdf_path,
                     role_title=role,
                     company=company
+                )
+            elif platform == "amazon":
+                result = amazon_applier.apply_amazon(
+                    job_url=job_url,
+                    pdf_path=pdf_path,
+                    role_title=role,
+                    company=company,
+                    location=job.get("location", "Tokyo, Japan")
                 )
             else:
                 result = {"status": "FAILED", "notes": f"Unsupported platform: {platform}"}
