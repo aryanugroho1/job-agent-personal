@@ -31,7 +31,7 @@ class GoogleAuthManager:
     def is_session_active(self, page: Page) -> bool:
         """
         Navigates to Google Careers application portal to verify if the session is currently authenticated.
-        Returns True if authenticated, False if redirected to accounts.google.com login.
+        Returns True if authenticated, False if redirected to accounts.google.com or Sign-in button is present.
         """
         try:
             print("[Google Auth] Verifying session validity on careers.google.com...")
@@ -39,8 +39,14 @@ class GoogleAuthManager:
             time.sleep(3.0)
 
             curr_url = page.url.lower()
-            if "accounts.google.com/signin" in curr_url or "/v2/identifier" in curr_url:
+            if "accounts.google.com" in curr_url:
                 print(f"[Google Auth] Redirected to login wall ({curr_url[:60]}...). Session is NOT active.")
+                return False
+
+            # If Sign in button is still present, session is not logged in
+            signin_count = page.locator("a:has-text('Sign in'), button:has-text('Sign in')").count()
+            if signin_count > 0:
+                print("[Google Auth] 'Sign in' button detected. User is NOT logged in.")
                 return False
 
             # Check for candidate dashboard / authenticated account indicators
@@ -68,66 +74,85 @@ class GoogleAuthManager:
             with open(self.cookies_file, "w", encoding="utf-8") as f:
                 json.dump(cookies, f, indent=2)
             print(f"[Google Auth] Successfully exported session state to {self.state_file}")
+            print(f"[Google Auth] Successfully exported cookies to {self.cookies_file}")
         except Exception as e:
             print(f"[Google Auth Warning] Could not export session state: {e}")
 
     def interactive_login(self):
         """
-        Launches a visible Chromium window with persistent user data directory.
+        Launches a visible Chromium/Edge window with persistent user data directory.
         Allows the user to log in manually, complete 2FA/Google prompt, and persist the session.
+        Waits for user to press ENTER before closing.
         """
         print("=" * 65)
         print("🔐 GOOGLE CAREERS INTERACTIVE LOGIN (ONE-TIME SETUP)")
         print("=" * 65)
-        print("A browser window is launching.")
-        print("1. Log in with your Google account.")
-        print("2. Complete any 2-Step Verification, phone prompt, or OTP.")
-        print("3. Once you reach the Google Careers portal / dashboard,")
-        print("   your session will be detected and saved automatically.")
+        print("1. Jendela browser akan terbuka secara otomatis.")
+        print("2. Silakan login dengan akun Google Anda dan selesaikan 2FA/OTP.")
+        print("3. Setelah berhasil masuk ke dashboard Google Careers:")
+        print("   Kembali ke terminal ini dan tekan tombol [ENTER].")
         print("=" * 65)
 
         with sync_playwright() as p:
-            context = p.chromium.launch_persistent_context(
-                user_data_dir=str(self.profile_dir),
-                headless=False,
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--no-sandbox",
-                    "--start-maximized"
-                ],
-                no_viewport=True,
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-            )
+            launch_args = [
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--start-maximized"
+            ]
+
+            # Try msedge first to bypass Google automation flags on Windows
+            channel = None
+            try:
+                b = p.chromium.launch(channel="msedge", headless=True)
+                b.close()
+                channel = "msedge"
+            except Exception:
+                pass
+
+            launch_kwargs = {
+                "user_data_dir": str(self.profile_dir),
+                "headless": False,
+                "args": launch_args,
+                "ignore_default_args": ["--enable-automation"],
+                "no_viewport": True,
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Edg/128.0.0.0"
+            }
+            if channel:
+                launch_kwargs["channel"] = channel
+
+            context = p.chromium.launch_persistent_context(**launch_kwargs)
             context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
             page = context.pages[0] if context.pages else context.new_page()
             page.goto("https://www.google.com/about/careers/applications/", wait_until="domcontentloaded")
+            time.sleep(2)
 
-            print("\n⏳ Waiting for login completion... (Press Ctrl+C in terminal to abort)")
+            # Auto click 'Sign in' button if visible so user directly gets the login box
+            try:
+                signin_btn = page.locator("a:has-text('Sign in'), button:has-text('Sign in')").first
+                if signin_btn.count() > 0 and signin_btn.is_visible():
+                    signin_btn.click()
+            except Exception:
+                pass
 
-            logged_in = False
-            start_time = time.time()
-            max_wait_seconds = 300
+            print("\n⏳ Browser terbuka. Silakan lakukan proses login di jendela browser.")
+            try:
+                input("\n⌨️  Tekan [ENTER] di sini setelah Anda SELESAI login di browser...")
+            except (KeyboardInterrupt, EOFError):
+                print("\n[Google Auth] Proses dibatalkan oleh pengguna.")
 
-            while time.time() - start_time < max_wait_seconds:
-                time.sleep(3)
-                curr_url = page.url.lower()
+            time.sleep(1)
+            # Verify session and export
+            is_valid = self.is_session_active(page)
+            self.export_session_state(context)
 
-                # Detect if user left login page and is back on careers portal
-                if "careers/applications" in curr_url and "accounts.google.com" not in curr_url:
-                    # Check for account menu / avatar
-                    if any(page.locator(sel).count() > 0 for sel in ["button[aria-label*='Google Account']", "a[href*='SignOutOptions']", "img[alt*='Google Account']", "header"]):
-                        time.sleep(2)
-                        logged_in = True
-                        print("\n🎉 [SUCCESS] Google Careers access detected!")
-                        break
-
-            if logged_in:
-                self.export_session_state(context)
-                print("✅ Google session saved! You can now run automated applications.")
+            if is_valid:
+                print("\n🎉 [SUCCESS] Sesi Google Careers aktif dan berhasil disimpan!")
+                print("💡 Agen sekarang siap menjalankan aplikasi Google Careers secara otomatis.")
             else:
-                print("⚠️ Timeout waiting for login. Exporting current state anyway...")
-                self.export_session_state(context)
+                print("\n⚠️ [CATATAN] Sesi belum terdeteksi aktif di dashboard, namun state browser telah disimpan.")
+                print("   Jika Anda belum selesai login, silakan jalankan script ini lagi kapan saja.")
 
             context.close()
 
