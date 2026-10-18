@@ -92,47 +92,58 @@ class AmazonAuthManager:
         print("=" * 65)
 
         with sync_playwright() as p:
-            context = p.chromium.launch_persistent_context(
-                user_data_dir=str(self.profile_dir),
-                headless=False,
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                    "--no-sandbox",
-                    "--start-maximized"
-                ],
-                no_viewport=True,
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-            )
+            launch_args = [
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--start-maximized"
+            ]
+
+            # Try msedge first to bypass Amazon WAF/bot detection
+            channel = None
+            try:
+                b = p.chromium.launch(channel="msedge", headless=True)
+                b.close()
+                channel = "msedge"
+            except Exception:
+                pass
+
+            launch_kwargs = {
+                "user_data_dir": str(self.profile_dir),
+                "headless": False,
+                "args": launch_args,
+                "ignore_default_args": ["--enable-automation"],
+                "no_viewport": True,
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Edg/128.0.0.0"
+            }
+            if channel:
+                launch_kwargs["channel"] = channel
+
+            context = p.chromium.launch_persistent_context(**launch_kwargs)
             context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
             page = context.pages[0] if context.pages else context.new_page()
             page.goto("https://account.amazon.jobs/dashboard", wait_until="domcontentloaded")
 
-            print("\n⏳ Waiting for login completion... (Press Ctrl+C in terminal if you wish to abort)")
+            print("\n⏳ Browser Amazon Jobs terbuka.")
+            print("👉 Silakan login dengan akun Amazon / Google / LinkedIn Anda.")
+            print("👉 Masukkan kode OTP / 2FA jika diminta.")
+            print("👉 Setelah masuk ke dashboard:")
+            try:
+                input("\n⌨️  Tekan [ENTER] di terminal ini setelah Anda SELESAI login...")
+            except (KeyboardInterrupt, EOFError):
+                print("\n[Amazon Auth] Proses dibatalkan oleh pengguna.")
 
-            # Auto-detect login up to 5 minutes
-            logged_in = False
-            start_time = time.time()
-            max_wait_seconds = 300
+            time.sleep(1)
+            is_valid = self.is_session_active(page)
+            self.export_session_state(context)
 
-            while time.time() - start_time < max_wait_seconds:
-                time.sleep(3)
-                curr_url = page.url.lower()
-
-                # If user successfully left passport.amazon.jobs and is on account.amazon.jobs
-                if "account.amazon.jobs" in curr_url and "passport" not in curr_url and "signin" not in curr_url:
-                    # Give page 2 seconds to settle
-                    time.sleep(2)
-                    logged_in = True
-                    print("\n🎉 [SUCCESS] Candidate Dashboard access detected!")
-                    break
-
-            if logged_in:
-                self.export_session_state(context)
-                print("✅ Session saved! You can now run automated discovery and applications.")
+            if is_valid:
+                print("\n🎉 [SUCCESS] Candidate Dashboard access detected & session saved!")
+                print("✅ Sesi Amazon Jobs berhasil disimpan! Anda siap menjalankan aplikasi otomatis.")
             else:
-                print("⚠️ Timeout waiting for login. Exporting current state anyway...")
-                self.export_session_state(context)
+                print("\n⚠️ [CATATAN] Sesi belum terdeteksi aktif di dashboard, namun state browser telah disimpan.")
+                print("   Jika Anda belum selesai login, silakan jalankan script ini lagi kapan saja.")
 
             context.close()
 
