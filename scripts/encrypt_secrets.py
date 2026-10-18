@@ -60,6 +60,8 @@ def main():
     print("   - config/service_account.json (jika ada)")
     print("   - config/linkedin_cookies.json & linkedin_state.json (jika ada)")
     print("   - config/indeed_cookies.json & indeed_state.json (jika ada)")
+    print("   - config/amazon_cookies.json & amazon_state.json (jika ada)")
+    print("   - config/google_cookies.json & google_state.json (jika ada)")
     print("\n[SUCCESS] File .env.enc siap di-commit ke Git. Data rahasia Anda aman.")
 
 if __name__ == "__main__":

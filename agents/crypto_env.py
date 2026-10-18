@@ -38,10 +38,10 @@ def load_encrypted_env(key: str | None = None) -> dict:
     for rel_path, content_str in bundled_files.items():
         file_path = Path(rel_path)
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        if not file_path.exists():
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(content_str)
-            print(f"[CryptoEnv] Restored secure config file: {rel_path}")
+        # Always sync latest encrypted bundle into config
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(content_str)
+        print(f"[CryptoEnv] Restored secure config file: {rel_path}")
 
     # Injeksi ke os.environ dalam runtime RAM
     for k, v in config.items():
@@ -62,7 +62,11 @@ def encrypt_dict_to_file(data: dict, master_key: str, out_path: Path = ENC_FILE_
             Path("config/linkedin_cookies.json"),
             Path("config/linkedin_state.json"),
             Path("config/indeed_cookies.json"),
-            Path("config/indeed_state.json")
+            Path("config/indeed_state.json"),
+            Path("config/amazon_cookies.json"),
+            Path("config/amazon_state.json"),
+            Path("config/google_cookies.json"),
+            Path("config/google_state.json"),
         ]:
             if target_file.exists():
                 with open(target_file, "r", encoding="utf-8") as f:
