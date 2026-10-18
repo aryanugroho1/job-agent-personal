@@ -19,6 +19,7 @@ from agents.crypto_env import load_encrypted_env
 from agents.auth_manager import AuthManager
 from agents.scraper import JobScraper
 from agents.amazon_scraper import AmazonScraper
+from agents.google_scraper import GoogleScraper
 from agents.dedup import is_duplicate
 from agents.matcher import evaluate_job_match
 from agents.doc_generator import generate_custom_cv
@@ -100,6 +101,19 @@ def main():
         amz_jobs = amz_scraper.scrape_jobs(keywords=amz_keywords, countries=amz_countries, limit_per_query=amz_limit)
         raw_candidates.extend(amz_jobs)
 
+    # 3.2 Scrape Google Careers Portal (careers.google.com)
+    goog_cfg = settings.get("google_search", {})
+    if goog_cfg.get("enabled", False):
+        print("\n" + "=" * 50)
+        print("🔍 Scanning Google Careers Portal...")
+        print("=" * 50)
+        goog_scraper = GoogleScraper()
+        goog_locations = goog_cfg.get("target_countries", [])
+        goog_keywords = goog_cfg.get("keywords", [])
+        goog_limit = goog_cfg.get("limit_per_query", 5)
+        goog_jobs = goog_scraper.scrape_jobs(keywords=goog_keywords, locations=goog_locations, limit_per_query=goog_limit)
+        raw_candidates.extend(goog_jobs)
+
     print(f"\n📊 Total raw postings discovered: {len(raw_candidates)}")
 
     # 4. Filter & Deduplicate
@@ -152,7 +166,7 @@ def main():
             tailored_title=tailored_title,
             tailored_summary=tailored_summary,
             company_name=job["company"],
-            job_id=job["job_id"].replace("li-", "").replace("in-", "").replace("amz-", "")
+            job_id=job["job_id"].replace("li-", "").replace("in-", "").replace("amz-", "").replace("goog-", "")
         )
         job["pdf_path"] = str(pdf_path)
 

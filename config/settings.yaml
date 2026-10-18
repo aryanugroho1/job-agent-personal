@@ -1,5 +1,5 @@
 # Autonomous Job Application Agent Configuration
-version: "2.0.0"
+version: "3.0.0"
 
 # Job Search Criteria
 search:
@@ -43,6 +43,32 @@ amazon_search:
     - "Telecom"
     - "Network"
   limit_per_query: 5
+
+# Google Careers Portal Search (careers.google.com)
+google_search:
+  enabled: true
+  target_countries:
+    - name: "Japan"
+      query_location: "Japan"
+      timezone: "Asia/Tokyo"
+    - name: "Singapore"
+      query_location: "Singapore"
+      timezone: "Asia/Singapore"
+    - name: "United Kingdom"
+      query_location: "United Kingdom"
+      timezone: "Europe/London"
+  keywords:
+    - "Google Cloud"
+    - "Business Intelligence"
+    - "Data Engineer"
+    - "Data Engineering"
+    - "Solutions Architect"
+    - "Customer Engineer"
+    - "Infrastructure"
+    - "Telecom"
+    - "Pixel"
+  limit_per_query: 5
+  max_active_applications: 3
 
 # Guardrails & Safety
 safety:

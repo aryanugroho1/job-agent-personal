@@ -20,6 +20,7 @@ from agents.auth_manager import AuthManager
 from agents.sheets_tracker import SheetsTracker
 from agents.applier import EasyApplyRunner
 from agents.amazon_applier import AmazonApplier
+from agents.google_applier import GoogleApplier
 from agents.notifier import send_alert
 
 MAX_DAILY_APPLICATIONS = 20
@@ -110,8 +111,12 @@ def main():
         amz_auth = AuthManager("amazon")
         amz_auth.load_cookies(context)
 
+        goog_auth = AuthManager("google")
+        goog_auth.load_cookies(context)
+
         applier = EasyApplyRunner(context)
         amazon_applier = AmazonApplier(context, auto_submit=args.auto_submit)
+        google_applier = GoogleApplier(context, auto_submit=args.auto_submit)
 
         max_exec_limit = min(MAX_DAILY_APPLICATIONS, args.limit)
         for job in due_jobs:
@@ -124,7 +129,7 @@ def main():
             company = job.get("company", "")
             pdf_path = job.get("pdf_path", "")
             
-            job_id_clean = str(job.get("job_id", "")).replace("li-", "").replace("in-", "").replace("amz-", "")
+            job_id_clean = str(job.get("job_id", "")).replace("li-", "").replace("in-", "").replace("amz-", "").replace("goog-", "")
             raw_url = str(job.get("url") or "")
             if platform == "linkedin":
                 if not raw_url or "/jobs/search" in raw_url:
@@ -133,6 +138,8 @@ def main():
                     job_url = raw_url
             elif platform == "amazon":
                 job_url = str(job.get("apply_url") or job.get("url") or f"https://account.amazon.jobs/jobs/{job_id_clean}/apply")
+            elif platform == "google":
+                job_url = str(job.get("apply_url") or job.get("url") or f"https://www.google.com/about/careers/applications/jobs/results/{job_id_clean}")
             else:
                 loc_lower = str(job.get("location", "")).lower()
                 base_indeed = "https://jp.indeed.com" if any(k in loc_lower for k in ["japan", "tokyo", "osaka"]) else "https://www.indeed.com"
@@ -161,6 +168,14 @@ def main():
                 )
             elif platform == "amazon":
                 result = amazon_applier.apply_amazon(
+                    job_url=job_url,
+                    pdf_path=pdf_path,
+                    role_title=role,
+                    company=company,
+                    location=job.get("location", "Tokyo, Japan")
+                )
+            elif platform == "google":
+                result = google_applier.apply_google(
                     job_url=job_url,
                     pdf_path=pdf_path,
                     role_title=role,
