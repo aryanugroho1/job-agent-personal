@@ -143,13 +143,13 @@ class AmazonApplier:
 
     def _handle_resume_upload(self, page: Page, pdf_path: str):
         """Locates and attaches tailored CV PDF if an upload field is visible."""
-        target_pdf = Path(pdf_path)
-        if not target_pdf.exists():
-            target_pdf = Path("generated_cvs") / Path(pdf_path).name
+        target_pdf = Path(pdf_path) if pdf_path else None
+        if not target_pdf or not target_pdf.is_file():
+            target_pdf = Path("generated_cvs") / Path(pdf_path or "").name
 
-        if not target_pdf.exists():
+        if not target_pdf.is_file():
             fallback_pdf = Path("generated_cvs/Sample_CV_Arya_Nugroho.pdf")
-            if fallback_pdf.exists():
+            if fallback_pdf.is_file():
                 target_pdf = fallback_pdf
             else:
                 return
@@ -169,12 +169,59 @@ class AmazonApplier:
         Answers Amazon corporate screening questions intelligently:
         - Work Authorization & Visa Sponsorship
         - Previous Amazon Employment (No)
-        - Non-compete (No)
-        - Age requirement (Yes)
+        - Government official / public servant (No)
+        - Sanctions / conflicts of interest / non-compete (No)
+        - Desired compensation in local currency
+        - Notice period
         - EEO / Demographics (Decline to state)
         """
         try:
-            # 1. Radio Button Groups (Fieldsets)
+            # 1. Text and Numeric Inputs (Compensation, years of exp, etc.)
+            text_inputs = page.locator("input[type='text'], input[type='number'], textarea").all()
+            for inp in text_inputs:
+                curr_val = inp.input_value().strip()
+                if curr_val:
+                    continue
+
+                iid = inp.get_attribute("id") or ""
+                # Locate label by for attribute, parent, or aria-labelledby
+                lbl_text = ""
+                if iid:
+                    lbl_el = page.locator(f"label[for='{iid}'], label[id='{iid}-label']")
+                    if lbl_el.count() > 0:
+                        lbl_text = lbl_el.first.inner_text().lower()
+                if not lbl_text:
+                    aria_lbl = inp.get_attribute("aria-labelledby") or ""
+                    if aria_lbl:
+                        lbl_el = page.locator(f"label[id='{aria_lbl}'], [id='{aria_lbl}']")
+                        if lbl_el.count() > 0:
+                            lbl_text = lbl_el.first.inner_text().lower()
+                if not lbl_text:
+                    parent_q = inp.locator("xpath=ancestor::div[contains(@class, 'question') or contains(@class, 'form-group')]")
+                    if parent_q.count() > 0:
+                        lbl_text = parent_q.first.inner_text().lower()
+
+                # Determine answer
+                fill_val = ""
+                if any(w in lbl_text for w in ["年間報酬", "報酬総額", "compensation", "salary", "desired", "expectation", "給与", "年収"]):
+                    # Standard Tokyo total compensation expectation for Senior Solutions Architect
+                    fill_val = "18,000,000"
+                elif any(w in lbl_text for w in ["years of experience", "years", "経験年数", "年数"]):
+                    fill_val = "8"
+                elif any(w in lbl_text for w in ["notice", "通知期間"]):
+                    fill_val = "4 weeks"
+                else:
+                    fill_val = "Negotiable"
+
+                try:
+                    inp.scroll_into_view_if_needed(timeout=1000)
+                    inp.fill(fill_val)
+                    inp.evaluate("el => { el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); }")
+                    print(f"  └─ [Text Answer] '{lbl_text[:40]}...' -> Filled '{fill_val}'")
+                except Exception as e:
+                    print(f"  └─ [Text Answer Warning]: {e}")
+
+            # 2. Radio Button Groups (Fieldsets)
             fieldsets = page.locator("fieldset, [role='radiogroup']").all()
             for fs in fieldsets:
                 legend = fs.locator("legend, label").first.inner_text().lower() if fs.locator("legend, label").count() > 0 else ""
@@ -185,11 +232,17 @@ class AmazonApplier:
                 target_val = "Yes"
                 if any(w in legend for w in ["previous", "ever been employed by amazon", "former employee", "prior employment at amazon"]):
                     target_val = "No"
-                elif any(w in legend for w in ["non-compete", "non compete", "restrictive covenant"]):
+                elif any(w in legend for w in ["non-compete", "non compete", "restrictive covenant", "競業避止"]):
                     target_val = "No"
-                elif any(w in legend for w in ["criminal", "felony", "conviction", "disciplinary"]):
+                elif any(w in legend for w in ["criminal", "felony", "conviction", "disciplinary", "犯罪"]):
                     target_val = "No"
-                elif any(w in legend for w in ["authorized", "right to work", "legally", "18 years", "eligible", "commute", "relocate"]):
+                elif any(w in legend for w in ["government", "公務員", "政府機関", "政府", "public servant", "official"]):
+                    target_val = "No"
+                elif any(w in legend for w in ["sanction", "制裁"]):
+                    target_val = "No"
+                elif any(w in legend for w in ["refugee", "難民", "asylum", "亡命"]):
+                    target_val = "No"
+                elif any(w in legend for w in ["authorized", "right to work", "legally", "18 years", "eligible", "commute", "relocate", "就労資格"]):
                     target_val = "Yes"
 
                 # Check radio matching target
@@ -199,63 +252,99 @@ class AmazonApplier:
                     lbl = fs.locator(f"label[for='{rid}']").first.inner_text().strip() if rid and fs.locator(f"label[for='{rid}']").count() > 0 else ""
                     combined = f"{val} {lbl}".lower()
 
-                    match = (target_val == "No" and any(k in combined for k in ["no", "いいえ", "false"])) or \
-                            (target_val == "Yes" and any(k in combined for k in ["yes", "はい", "true"]))
+                    match = (target_val == "No" and any(k in combined for k in ["no", "いいえ", "false", "ありません"])) or \
+                            (target_val == "Yes" and any(k in combined for k in ["yes", "はい", "true", "あります"]))
 
                     if match:
                         try:
                             r.scroll_into_view_if_needed(timeout=1000)
                             r.check(force=True)
-                            print(f"  └─ [Radio Answer] '{legend[:45]}...' -> Selected '{target_val}'")
+                            print(f"  └─ [Radio Answer] '{legend[:45]}...' -> Selected '{target_val}' ({lbl[:30]})")
                             break
                         except Exception:
                             r.evaluate("el => { el.checked = true; el.dispatchEvent(new Event('change', { bubbles: true })); }")
                             break
 
-            # 2. Select Dropdowns (Demographics, EEO, Work Auth)
+            # 3. Select Dropdowns (Demographics, EEO, Work Auth, Notice Period)
             selects = page.locator("select").all()
             for sel in selects:
                 sid = sel.get_attribute("id") or ""
                 lbl_el = page.locator(f"label[for='{sid}']")
                 lbl_text = lbl_el.first.inner_text().lower() if lbl_el.count() > 0 else ""
+                if not lbl_text:
+                    parent_block = sel.locator("xpath=ancestor::div[contains(@class, 'question') or contains(@class, 'form-group')]")
+                    if parent_block.count() > 0:
+                        lbl_text = parent_block.first.inner_text().lower()
 
                 curr_val = sel.input_value()
-                if curr_val and curr_val != "Select an option" and curr_val != "":
-                    continue
+                if curr_val and curr_val not in ["Select an option", ""]:
+                    # Check if selected value is a placeholder list (e.g. "即時、1週間...")
+                    opt_selected = sel.locator("option:checked")
+                    if opt_selected.count() > 0:
+                        otext = opt_selected.first.inner_text()
+                        if "、" not in otext and "select" not in otext.lower():
+                            continue
 
                 opts = sel.locator("option").all()
                 if len(opts) <= 1:
                     continue
 
-                # EEO & Demographics: Safely decline to answer
-                is_demographic = any(w in lbl_text for w in ["gender", "race", "ethnicity", "veteran", "disability", "障害", "性別"])
                 chosen_opt = None
 
-                if is_demographic:
+                # Check if Notice Period question
+                is_notice = any(w in lbl_text for w in ["通知期間", "辞任", "notice", "availability"])
+                if is_notice:
+                    for opt in opts[1:]:
+                        otext = opt.inner_text()
+                        oval = opt.get_attribute("value") or ""
+                        # Skip placeholder that joins all options
+                        if "、" in otext:
+                            continue
+                        if any(k in otext for k in ["4週間", "4 weeks", "1 month", "30 days", "1ヶ月"]):
+                            chosen_opt = oval
+                            break
+                        elif any(k in otext for k in ["2週間", "2 weeks"]):
+                            chosen_opt = oval
+                            break
+                    if not chosen_opt and len(opts) > 4:
+                        chosen_opt = opts[4].get_attribute("value")  # Often 4th option is 4 weeks
+
+                # Demographics: Decline to answer
+                is_demographic = any(w in lbl_text for w in ["gender", "race", "ethnicity", "veteran", "disability", "障害", "性別"])
+                if is_demographic and not chosen_opt:
                     for opt in opts[1:]:
                         otext = opt.inner_text().lower()
                         if any(k in otext for k in ["decline", "prefer not", "do not wish", "choose not", "回答しない", "希望しない"]):
                             chosen_opt = opt.get_attribute("value")
                             break
 
+                # Standard Yes/Authorized answer
                 if not chosen_opt:
                     for opt in opts[1:]:
                         otext = opt.inner_text().lower()
+                        if "、" in otext:
+                            continue
                         if any(k in otext for k in ["yes", "はい", "authorized"]):
                             chosen_opt = opt.get_attribute("value")
                             break
 
-                if not chosen_opt and len(opts) > 1:
-                    chosen_opt = opts[1].get_attribute("value")
+                # Fallback: Pick first non-placeholder option
+                if not chosen_opt:
+                    for opt in opts[1:]:
+                        otext = opt.inner_text()
+                        if "、" not in otext and otext.strip():
+                            chosen_opt = opt.get_attribute("value")
+                            break
 
                 if chosen_opt:
                     try:
                         sel.select_option(value=chosen_opt)
+                        sel.evaluate("el => { el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); }")
                         print(f"  └─ [Select Answer] '{lbl_text[:40]}' -> Selected option '{chosen_opt}'")
                     except Exception as e:
                         pass
 
-            # 3. Checkboxes (Agreements & Consents)
+            # 4. Checkboxes (Agreements & Consents)
             checkboxes = page.locator("input[type='checkbox']").all()
             for cb in checkboxes:
                 if not cb.is_checked():
@@ -274,11 +363,15 @@ class AmazonApplier:
         review_indicators = [
             "button:has-text('Submit application')",
             "button:has-text('Submit Application')",
+            "button:has-text('応募を送信する')",
             "button:has-text('応募を送信')",
             "h1:has-text('Review your application')",
             "h2:has-text('Review your application')",
             "h1:has-text('Review and submit')",
             "h2:has-text('Review and submit')",
+            "h1:has-text('応募内容とフォームを確認する')",
+            "h2:has-text('応募内容とフォームを確認する')",
+            "h3:has-text('応募内容とフォームを確認する')",
             ":has-text('Please review your application before submitting')",
         ]
         return any(page.locator(sel).count() > 0 and page.locator(sel).first.is_visible() for sel in review_indicators)

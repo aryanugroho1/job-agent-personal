@@ -117,7 +117,7 @@ class AmazonScraper:
                         print(f"  └─ Found {total_hits} total hits on Amazon (fetching top {len(jobs_list)})")
 
                         for item in jobs_list:
-                            raw_id = str(item.get("id") or item.get("id_icims") or "")
+                            raw_id = str(item.get("id_icims") or item.get("id") or "")
                             if not raw_id or raw_id in seen_job_ids:
                                 continue
                             seen_job_ids.add(raw_id)
@@ -133,7 +133,7 @@ class AmazonScraper:
 
     def _format_job_item(self, item: dict[str, Any], country_name: str, country_code: str) -> dict[str, Any]:
         """Formats raw Amazon API job JSON into the standardized application agent schema."""
-        raw_id = str(item.get("id") or item.get("id_icims") or "")
+        raw_id = str(item.get("id_icims") or item.get("id") or "")
         title = item.get("title", "").strip()
         company = item.get("company_name") or "Amazon Web Services (AWS)"
         city = item.get("city") or ""

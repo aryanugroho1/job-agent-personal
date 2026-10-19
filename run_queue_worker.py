@@ -25,6 +25,31 @@ from agents.notifier import send_alert
 
 MAX_DAILY_APPLICATIONS = 20
 
+_AMAZON_URL_CACHE = {}
+
+def resolve_amazon_apply_url(job_id_clean: str, raw_url: str = "") -> str:
+    """Ensures Amazon application uses the valid numeric id_icims requisition ID instead of UUID."""
+    global _AMAZON_URL_CACHE
+    if not job_id_clean.isdigit():
+        if not _AMAZON_URL_CACHE:
+            try:
+                from agents.amazon_scraper import AmazonScraper
+                scraper = AmazonScraper()
+                scraped = scraper.scrape_jobs(
+                    keywords=['Solutions Architect', 'Cloud Architect', 'Data Engineer', 'Telecom', 'Network'],
+                    countries=['JPN', 'SGP', 'GBR'],
+                    limit_per_query=20
+                )
+                _AMAZON_URL_CACHE = {s['job_id'].replace('amz-', ''): s['apply_url'] for s in scraped}
+            except Exception as e:
+                print(f"[Worker Warning] Could not pre-fetch Amazon URL mapping: {e}")
+        if job_id_clean in _AMAZON_URL_CACHE:
+            return _AMAZON_URL_CACHE[job_id_clean]
+
+    if raw_url and "account.amazon.jobs" in raw_url:
+        return raw_url
+    return f"https://account.amazon.jobs/jobs/{job_id_clean}/apply"
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Queue Worker for Automated Job Applications")
@@ -162,7 +187,7 @@ def main():
                 else:
                     job_url = raw_url
             elif platform == "amazon":
-                job_url = str(job.get("apply_url") or job.get("url") or f"https://account.amazon.jobs/jobs/{job_id_clean}/apply")
+                job_url = resolve_amazon_apply_url(job_id_clean, str(job.get("apply_url") or job.get("url") or ""))
             elif platform == "google":
                 job_url = str(job.get("apply_url") or job.get("url") or f"https://www.google.com/about/careers/applications/jobs/results/{job_id_clean}")
             else:
