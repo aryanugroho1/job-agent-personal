@@ -98,8 +98,9 @@ class AmazonApplier:
 
                     if self.auto_submit:
                         print("🚀 Auto-submit is ENABLED. Clicking Submit Application...")
-                        submit_btn = page.locator("button:has-text('Submit application'), button:has-text('Submit Application'), button:has-text('応募を送信'), button:has-text('Submit')").first
+                        submit_btn = page.locator("button:has-text('応募を送信する'), button:has-text('Submit application'), button:has-text('Submit Application'), button:has-text('応募を送信'), button:has-text('Submit')").first
                         if submit_btn.is_visible():
+                            submit_btn.scroll_into_view_if_needed(timeout=2000)
                             submit_btn.click()
                             human_jitter(3.0, 5.0)
                             send_alert(
