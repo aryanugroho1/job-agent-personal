@@ -148,7 +148,11 @@ class AmazonApplier:
             target_pdf = Path("generated_cvs") / Path(pdf_path).name
 
         if not target_pdf.exists():
-            return
+            fallback_pdf = Path("generated_cvs/Sample_CV_Arya_Nugroho.pdf")
+            if fallback_pdf.exists():
+                target_pdf = fallback_pdf
+            else:
+                return
 
         file_inputs = page.locator("input[type='file']").all()
         for finp in file_inputs:

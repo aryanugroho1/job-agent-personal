@@ -11,8 +11,10 @@ def load_encrypted_env(key: str | None = None) -> dict:
     Zero-disk-leakage for sensitive production runs.
     """
     master_key = key or os.getenv("AGENT_MASTER_KEY")
+    if not master_key and Path("AGENT_MASTER_KEY.txt").exists():
+        master_key = Path("AGENT_MASTER_KEY.txt").read_text(encoding="utf-8").strip()
     if not master_key:
-        master_key = input("🔑 Enter AGENT_MASTER_KEY: ").strip()
+        master_key = input("Enter AGENT_MASTER_KEY: ").strip()
 
     cipher_suite = Fernet(master_key.encode())
     if not ENC_FILE_PATH.exists():

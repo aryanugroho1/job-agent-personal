@@ -117,6 +117,37 @@ class SheetsTracker:
             print(f"[SheetsTracker Error] Failed reading manual review jobs: {e}")
             return []
 
+    def get_pending_jobs(self, platform: str | None = None, include_auth: bool = True, include_manual: bool = True, include_queued: bool = True) -> list[dict]:
+        """
+        Retrieves all pending/actionable jobs, optionally filtered by platform.
+        """
+        if not self.sheet and not self.connect():
+            return []
+
+        target_statuses = set()
+        if include_queued:
+            target_statuses.add("QUEUED")
+        if include_auth:
+            target_statuses.add("AUTH_REQUIRED")
+        if include_manual:
+            target_statuses.add("MANUAL_REVIEW")
+
+        try:
+            records = self.sheet.get_all_records()
+            pending = []
+            for idx, r in enumerate(records, start=2):
+                st = str(r.get("status", "")).strip()
+                plat = str(r.get("platform", "")).strip().lower()
+                if st in target_statuses:
+                    if platform and platform.lower() != "all" and plat != platform.lower():
+                        continue
+                    r["_row_number"] = idx
+                    pending.append(r)
+            return pending
+        except Exception as e:
+            print(f"[SheetsTracker Error] Failed reading pending jobs: {e}")
+            return []
+
     def get_job_by_row(self, row_number: int) -> dict | None:
         """
         Retrieves a single job record by its row number in the sheet.

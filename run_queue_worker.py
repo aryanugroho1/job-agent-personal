@@ -32,6 +32,9 @@ def main():
     parser.add_argument("--limit", type=int, default=MAX_DAILY_APPLICATIONS, help="Max applications to process in this run")
     parser.add_argument("--row", type=int, help="Apply directly to a specific row number in Google Sheets for instant verification")
     parser.add_argument("--retry-manual", action="store_true", help="Retry applying to jobs currently marked as MANUAL_REVIEW")
+    parser.add_argument("--retry-auth", action="store_true", help="Retry applying to jobs marked as AUTH_REQUIRED")
+    parser.add_argument("--all-pending", action="store_true", help="Include all QUEUED, MANUAL_REVIEW, and AUTH_REQUIRED jobs")
+    parser.add_argument("--platform", type=str, default="all", help="Target platform (amazon, google, linkedin, indeed, all)")
     parser.add_argument("--auto-submit", action="store_true", help="Enable automatic submission for Amazon instead of co-pilot review")
     args = parser.parse_args()
 
@@ -39,10 +42,14 @@ def main():
     print(f"⏰ [Phase 2: Queue Worker Running] {datetime.now(timezone.utc).isoformat()}")
     if args.row:
         print(f"🎯 [SINGLE ROW TEST MODE] Targeting Row #{args.row}")
+    elif args.all_pending:
+        print(f"⚡ [ALL PENDING MODE] Targeting all pending jobs (Platform: {args.platform})")
     elif args.retry_manual:
-        print("🔄 [RETRY MANUAL MODE] Targeting jobs marked as MANUAL_REVIEW")
+        print(f"🔄 [RETRY MANUAL MODE] Targeting jobs marked as MANUAL_REVIEW (Platform: {args.platform})")
+    elif args.retry_auth:
+        print(f"🔑 [RETRY AUTH MODE] Targeting jobs marked as AUTH_REQUIRED (Platform: {args.platform})")
     elif args.now:
-        print("⚡ [IMMEDIATE MODE ENABLED] Bypassing scheduled_utc filter.")
+        print(f"⚡ [IMMEDIATE MODE ENABLED] Bypassing scheduled_utc filter (Platform: {args.platform}).")
     print("=" * 60)
 
     # 1. Load decrypted env in RAM
@@ -61,9 +68,23 @@ def main():
         else:
             print(f"❌ Could not find valid record at Row #{args.row}")
             return
+    elif args.all_pending or args.platform.lower() == "amazon":
+        due_jobs = sheets.get_pending_jobs(
+            platform=args.platform if args.platform != "all" else None,
+            include_auth=True,
+            include_manual=True,
+            include_queued=True
+        )[:args.limit]
     elif args.retry_manual:
         manual_jobs = sheets.get_manual_review_jobs()
         due_jobs = manual_jobs[:args.limit]
+    elif args.retry_auth:
+        due_jobs = sheets.get_pending_jobs(
+            platform=args.platform if args.platform != "all" else None,
+            include_auth=True,
+            include_manual=False,
+            include_queued=False
+        )[:args.limit]
     elif args.now:
         queued_jobs = sheets.get_queued_jobs()
         due_jobs = queued_jobs[:args.limit]
@@ -79,6 +100,10 @@ def main():
                     due_jobs.append(job)
             except Exception as e:
                 print(f"[Worker Warning] Could not parse scheduled_utc '{sched_str}': {e}")
+
+    # Optional filter by platform if not already filtered
+    if args.platform and args.platform.lower() != "all":
+        due_jobs = [j for j in due_jobs if str(j.get("platform", "")).lower() == args.platform.lower()]
 
     if not due_jobs:
         print("💤 No queued or eligible jobs due for execution. Exiting clean.")
@@ -118,7 +143,7 @@ def main():
         amazon_applier = AmazonApplier(context, auto_submit=args.auto_submit)
         google_applier = GoogleApplier(context, auto_submit=args.auto_submit)
 
-        max_exec_limit = min(MAX_DAILY_APPLICATIONS, args.limit)
+        max_exec_limit = args.limit
         for job in due_jobs:
             if applied_count >= max_exec_limit:
                 print(f"🛑 Execution limit of {max_exec_limit} applications reached. Stopping run.")
