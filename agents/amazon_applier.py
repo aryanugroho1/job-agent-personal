@@ -79,6 +79,16 @@ class AmazonApplier:
                 human_jitter(2.0, 3.5)
                 print(f"[Amazon Applier] Processing Step #{step_idx} (URL: {page.url[:60]}...)")
 
+                # Handle Language Selection modal if presented (e.g. UK / US roles viewed by a Japanese account)
+                lang_btn = page.locator("button:has-text('Apply in English'), a:has-text('Apply in English')")
+                if lang_btn.count() > 0 and lang_btn.first.is_visible():
+                    print("  └─ [Language Selection] Job requires English. Clicking 'Apply in English'...")
+                    try:
+                        lang_btn.first.click()
+                        human_jitter(2.5, 4.0)
+                    except Exception as e:
+                        print(f"  └─ [Language Selection Warning]: {e}")
+
                 # Handle Resume Upload
                 self._handle_resume_upload(page, pdf_path)
 
@@ -380,13 +390,15 @@ class AmazonApplier:
     def _click_next_step(self, page: Page) -> bool:
         """Finds and clicks the primary button to progress to the next application step."""
         next_selectors = [
+            "button:has-text('Apply in English')",
+            "a:has-text('Apply in English')",
             "button:has-text('Save and continue')",
             "button:has-text('Save & continue')",
             "button:has-text('Next step')",
             "button:has-text('Next')",
             "button:has-text('次へ')",
             "button:has-text('保存して続行')",
-            "button.btn-primary:has-text('Continue')",
+            "button:has-text('Continue')",
             "button[type='submit']",
         ]
 
