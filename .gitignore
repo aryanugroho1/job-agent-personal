@@ -24,6 +24,7 @@ PRD.md
 # Generated output files
 generated_cvs/
 logs/*.log
+scratch/
 
 # OS & Editor files
 .DS_Store

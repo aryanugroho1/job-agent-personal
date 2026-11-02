@@ -142,8 +142,11 @@ def main():
 
     print(f"🎯 Postings passing Early-Bird & Dedup: {len(valid_jobs)}")
 
-    # 5. AI Evaluation, Resume Generation, & Queue Scheduling
+    # 5. AI Evaluation, Dynamic Google Top-3 Ranking, Resume Generation, & Queue Scheduling
     queued_count = 0
+    standard_qualified = []
+    google_qualified = []
+
     for job in valid_jobs:
         print(f"\n🤖 Evaluating: {job['role_title']} at {job['company']}...")
         match_result = evaluate_job_match(master_cv, job)
@@ -157,7 +160,16 @@ def main():
             sheets.append_job(job)
             continue
 
-        print(f"✅ Match score {score}%! Tailoring resume...")
+        platform_clean = str(job.get("platform", "")).lower()
+        company_clean = str(job.get("company", "")).lower()
+        if platform_clean == "google" or "google" in company_clean:
+            google_qualified.append((job, match_result))
+        else:
+            standard_qualified.append((job, match_result))
+
+    # 5.1 Process Standard Qualified Postings (LinkedIn, Indeed, Amazon)
+    for job, match_result in standard_qualified:
+        print(f"✅ Match score {job['match_score']}% ({job['company']})! Tailoring resume...")
         tailored_title = match_result.get("tailored_role_title", job["role_title"])
         tailored_summary = match_result.get("tailored_summary", master_cv["summary"]["baseline"])
 
@@ -180,6 +192,55 @@ def main():
 
         sheets.append_job(job)
         queued_count += 1
+
+    # 5.2 Process Google Qualified Postings with Dynamic Top-3 Ranking & Slot Replenishment
+    if google_qualified:
+        print("\n" + "=" * 50)
+        print("🎯 Applying Dynamic Top-3 Ranking for Google Careers...")
+        print("=" * 50)
+        # Sort by match_score descending
+        google_qualified.sort(key=lambda x: x[0]["match_score"], reverse=True)
+
+        goog_cfg = settings.get("google_search", {})
+        max_active = goog_cfg.get("max_active_applications", 3)
+        daily_top_limit = goog_cfg.get("daily_top_limit", 3)
+        active_google_count = sheets.get_active_google_applications_count()
+
+        available_slots = max(0, max_active - active_google_count)
+        slots_to_fill = min(available_slots, daily_top_limit)
+        print(f"ℹ️ Google Active Applications: {active_google_count}/{max_active} | Available Slots Today: {slots_to_fill}")
+
+        for rank, (job, match_result) in enumerate(google_qualified, start=1):
+            score = job["match_score"]
+            if rank <= slots_to_fill:
+                print(f"🏆 [Rank #{rank} - Auto-Apply Slot] {job['role_title']} (Match: {score}%)")
+                tailored_title = match_result.get("tailored_role_title", job["role_title"])
+                tailored_summary = match_result.get("tailored_summary", master_cv["summary"]["baseline"])
+
+                pdf_path = generate_custom_cv(
+                    master_cv=master_cv,
+                    tailored_title=tailored_title,
+                    tailored_summary=tailored_summary,
+                    company_name=job["company"],
+                    job_id=job["job_id"].replace("goog-", "")
+                )
+                job["pdf_path"] = str(pdf_path)
+
+                tz_name = resolve_timezone(job["location"])
+                scheduled_utc = calculate_target_utc(tz_name, target_hour=9)
+                job["target_timezone"] = tz_name
+                job["scheduled_utc"] = scheduled_utc.strftime("%Y-%m-%d %H:%M:%S")
+                job["status"] = "QUEUED"
+                job["notes"] = f"Top-ranked Google application #{rank} (Match: {score}%). Auto-submit enabled."
+
+                sheets.append_job(job)
+                queued_count += 1
+            else:
+                print(f"📦 [Rank #{rank} - Reserved in Backlog] {job['role_title']} (Match: {score}%)")
+                job["pdf_path"] = ""
+                job["status"] = "BACKLOG_RANKED"
+                job["notes"] = f"Google Backlog Rank #{rank} (Match: {score}%). Waiting for active slot ({active_google_count}/{max_active})."
+                sheets.append_job(job)
 
     send_alert(
         f"Daily Discovery complete. Queued {queued_count} high-match early-bird applications!",

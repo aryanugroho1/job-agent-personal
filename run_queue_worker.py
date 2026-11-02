@@ -8,6 +8,7 @@ import sys
 import os
 from pathlib import Path
 from datetime import datetime, timezone
+import yaml
 from playwright.sync_api import sync_playwright
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -77,8 +78,10 @@ def main():
         print(f"⚡ [IMMEDIATE MODE ENABLED] Bypassing scheduled_utc filter (Platform: {args.platform}).")
     print("=" * 60)
 
-    # 1. Load decrypted env in RAM
+    # 1. Load decrypted env in RAM & Config
     load_encrypted_env()
+    with open("config/settings.yaml", "r") as f:
+        settings = yaml.safe_load(f)
 
     # 2. Query Google Sheets queue
     sheets = SheetsTracker()
@@ -225,6 +228,20 @@ def main():
                     location=job.get("location", "Tokyo, Japan")
                 )
             elif platform == "google":
+                goog_cfg = settings.get("google_search", {})
+                max_active = goog_cfg.get("max_active_applications", 3)
+                active_google_count = sheets.get_active_google_applications_count()
+
+                if active_google_count >= max_active:
+                    msg = f"Google active application limit ({active_google_count}/{max_active}) reached. Deferring to backlog."
+                    print(f"🛑 {msg}")
+                    if row_num:
+                        sheets.update_job_status(row_num, "BACKLOG_RANKED", notes=msg)
+                    continue
+
+                is_auto_submit = args.auto_submit or goog_cfg.get("auto_submit_top", True)
+                google_applier.auto_submit = is_auto_submit
+
                 result = google_applier.apply_google(
                     job_url=job_url,
                     pdf_path=pdf_path,

@@ -186,3 +186,71 @@ class SheetsTracker:
         except Exception as e:
             print(f"[SheetsTracker Error] Update cell failed: {e}")
             return False
+
+    def get_active_google_applications_count(self) -> int:
+        """
+        Returns the count of currently active Google applications (APPLIED / ACTIVE).
+        """
+        if not self.sheet and not self.connect():
+            return 0
+
+        try:
+            records = self.sheet.get_all_records()
+            count = 0
+            for r in records:
+                plat = str(r.get("platform", "")).strip().lower()
+                status = str(r.get("status", "")).strip().upper()
+                if plat == "google" and status in ["APPLIED", "ACTIVE", "SUBMITTED"]:
+                    count += 1
+            return count
+        except Exception as e:
+            print(f"[SheetsTracker Error] Failed counting active Google applications: {e}")
+            return 0
+
+    def get_active_google_jobs(self) -> list[dict]:
+        """
+        Returns all currently active Google jobs.
+        """
+        if not self.sheet and not self.connect():
+            return []
+
+        try:
+            records = self.sheet.get_all_records()
+            active = []
+            for idx, r in enumerate(records, start=2):
+                plat = str(r.get("platform", "")).strip().lower()
+                status = str(r.get("status", "")).strip().upper()
+                if plat == "google" and status in ["APPLIED", "ACTIVE", "SUBMITTED"]:
+                    r["_row_number"] = idx
+                    active.append(r)
+            return active
+        except Exception as e:
+            print(f"[SheetsTracker Error] Failed reading active Google jobs: {e}")
+            return []
+
+    def get_google_backlog_jobs(self, limit: int = 3) -> list[dict]:
+        """
+        Returns highest-scoring Google jobs currently held in BACKLOG_RANKED or MANUAL_REVIEW.
+        """
+        if not self.sheet and not self.connect():
+            return []
+
+        try:
+            records = self.sheet.get_all_records()
+            backlog = []
+            for idx, r in enumerate(records, start=2):
+                plat = str(r.get("platform", "")).strip().lower()
+                status = str(r.get("status", "")).strip().upper()
+                if plat == "google" and status in ["BACKLOG_RANKED", "MANUAL_REVIEW"]:
+                    r["_row_number"] = idx
+                    try:
+                        r["match_score"] = int(r.get("match_score", 0))
+                    except Exception:
+                        r["match_score"] = 0
+                    backlog.append(r)
+            backlog.sort(key=lambda x: x["match_score"], reverse=True)
+            return backlog[:limit]
+        except Exception as e:
+            print(f"[SheetsTracker Error] Failed reading Google backlog: {e}")
+            return []
+

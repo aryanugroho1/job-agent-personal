@@ -11,6 +11,7 @@ Features:
 import os
 import random
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from playwright.sync_api import BrowserContext, Page, Locator
 from agents.notifier import send_alert
@@ -88,6 +89,13 @@ class GoogleApplier:
                 print("[Google Applier] Role already applied previously.")
                 return {"status": "ALREADY_APPLIED", "notes": "Role already applied previously on Google Careers"}
 
+            # Check if active application limit (3) is reached
+            limit_msg = page.locator(':has-text("maximum number of active applications"), :has-text("already have 3 active applications"), :has-text("maximum applications")')
+            if limit_msg.count() > 0 and limit_msg.first.is_visible():
+                msg_txt = limit_msg.first.inner_text().strip()
+                print(f"[Google Applier] Limit reached: {msg_txt[:100]}")
+                return {"status": "LIMIT_REACHED", "notes": f"Google active application limit (3) reached: {msg_txt[:80]}"}
+
             # Multi-step application wizard (Budget: up to 8 steps)
             max_steps = 8
             for step_idx in range(1, max_steps + 1):
@@ -111,16 +119,35 @@ class GoogleApplier:
                         print(f"⚠️ Could not capture screenshot: {e}")
 
                     if self.auto_submit:
-                        print("🚀 Auto-submit is ENABLED. Submitting application...")
-                        submit_btn = page.locator("button:has-text('Submit'), div.VfPpkd-LgbsSe:has-text('Submit')").first
+                        print("🚀 Auto-submit is ENABLED. Submitting application to Google...")
+                        submit_btn = page.locator(
+                            "button:has-text('Submit application'), "
+                            "div.VfPpkd-LgbsSe:has-text('Submit application'), "
+                            "button:has-text('Submit'), "
+                            "div.VfPpkd-LgbsSe:has-text('Submit'), "
+                            "button[type='submit']"
+                        ).first
                         if submit_btn.is_visible():
                             submit_btn.click()
-                            human_jitter(3.0, 5.0)
+                            human_jitter(3.5, 5.5)
+
+                            # Verify if limit banner appeared after submit attempt
+                            limit_after = page.locator(':has-text("maximum number of active applications"), :has-text("already have 3 active applications")')
+                            if limit_after.count() > 0 and limit_after.first.is_visible():
+                                return {"status": "LIMIT_REACHED", "notes": "Google active application limit reached upon submit attempt."}
+
+                            applied_at_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
                             send_alert(
                                 f"Successfully submitted Google application for {role_title} ({location})!",
-                                title="Google Application Submitted"
+                                title="Google Application Submitted",
+                                priority="high",
+                                tags=["tada", "briefcase"]
                             )
-                            return {"status": "APPLIED", "notes": f"Submitted automatically to Google. Review: {screenshot_file}"}
+                            return {
+                                "status": "APPLIED",
+                                "applied_at": applied_at_str,
+                                "notes": f"Submitted automatically to Google. Review: {screenshot_file}"
+                            }
 
                     # Co-Pilot Mode (Default Safety Guardrail)
                     alert_msg = (
